@@ -181,6 +181,7 @@ class MainActivity : Activity() {
         }
         findViewById<Button>(R.id.stopButton).setOnClickListener {
             RingtoneService.stop(this)
+            SmsObserverService.stopPlayback(this)
             setStatus("已停止播放")
         }
         findViewById<Button>(R.id.permissionButton).setOnClickListener {
