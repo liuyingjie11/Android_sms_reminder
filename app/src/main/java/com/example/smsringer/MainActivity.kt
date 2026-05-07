@@ -2,6 +2,9 @@ package com.example.smsringer
 
 import android.Manifest
 import android.app.Activity
+import android.app.ActivityManager
+import android.app.NotificationManager
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.RingtoneManager
@@ -13,6 +16,7 @@ import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
 import android.widget.SeekBar
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 
@@ -24,18 +28,27 @@ class MainActivity : Activity() {
     private lateinit var mockContentInput: EditText
     private lateinit var volumeSeek: SeekBar
     private lateinit var volumeValue: TextView
+    private lateinit var vibrateSwitch: Switch
+    private lateinit var hideFromRecentsSwitch: Switch
     private lateinit var ringtoneName: TextView
     private lateinit var statusText: TextView
     private var selectedRingtoneUri: Uri = Settings.System.DEFAULT_NOTIFICATION_URI
+    private var isLoadingRule = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         store = RuleStore(this)
+        RingtoneService.ensurePlaybackNotificationChannel(this)
         bindViews()
         loadRule()
         requestNeededPermissions()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        showLastSmsDiagnostic()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -59,8 +72,8 @@ class MainActivity : Activity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_PERMISSIONS && grantResults.any { it != PackageManager.PERMISSION_GRANTED }) {
-            setStatus("需要短信和通知权限才能正常提醒")
+        if (requestCode == REQUEST_PERMISSIONS) {
+            setStatus(buildPermissionStatus())
         }
     }
 
@@ -71,6 +84,8 @@ class MainActivity : Activity() {
         mockContentInput = findViewById(R.id.mockContentInput)
         volumeSeek = findViewById(R.id.volumeSeek)
         volumeValue = findViewById(R.id.volumeValue)
+        vibrateSwitch = findViewById(R.id.vibrateSwitch)
+        hideFromRecentsSwitch = findViewById(R.id.hideFromRecentsSwitch)
         ringtoneName = findViewById(R.id.ringtoneName)
         statusText = findViewById(R.id.statusText)
 
@@ -87,6 +102,17 @@ class MainActivity : Activity() {
                 setStatus("音量已更新")
             }
         })
+        vibrateSwitch.setOnCheckedChangeListener { _, _ ->
+            if (isLoadingRule) return@setOnCheckedChangeListener
+            saveRule(showToast = false)
+            setStatus("震动设置已更新")
+        }
+        hideFromRecentsSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isLoadingRule) return@setOnCheckedChangeListener
+            saveRule(showToast = false)
+            applyHideFromRecents(isChecked)
+            setStatus(if (isChecked) "已从最近任务中隐藏" else "已在最近任务中显示")
+        }
 
         findViewById<Button>(R.id.testButton).setOnClickListener {
             runMockSmsTest()
@@ -101,15 +127,26 @@ class MainActivity : Activity() {
             RingtoneService.stop(this)
             setStatus("已停止播放")
         }
+        findViewById<Button>(R.id.permissionButton).setOnClickListener {
+            requestSmsPermissionManually()
+        }
+        findViewById<Button>(R.id.notificationPermissionButton).setOnClickListener {
+            requestNotificationPermissionManually()
+        }
     }
 
     private fun loadRule() {
         val rule = store.load()
+        isLoadingRule = true
         phoneInput.setText(rule.phoneKeyword)
         contentInput.setText(rule.contentKeyword)
         selectedRingtoneUri = rule.ringtoneUri
         volumeSeek.progress = (rule.volume * 100).toInt()
         volumeValue.text = "${volumeSeek.progress}%"
+        vibrateSwitch.isChecked = rule.vibrateWhenPlaying
+        hideFromRecentsSwitch.isChecked = rule.hideFromRecents
+        isLoadingRule = false
+        applyHideFromRecents(rule.hideFromRecents)
         updateRingtoneName()
         setStatus("填写号码或短信内容关键词后保存")
     }
@@ -119,7 +156,9 @@ class MainActivity : Activity() {
             phoneKeyword = phoneInput.text.toString(),
             contentKeyword = contentInput.text.toString(),
             ringtoneUri = selectedRingtoneUri,
-            volume = volumeSeek.progress / 100f
+            volume = volumeSeek.progress / 100f,
+            vibrateWhenPlaying = vibrateSwitch.isChecked,
+            hideFromRecents = hideFromRecentsSwitch.isChecked
         )
         if (showToast) {
             Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show()
@@ -135,7 +174,11 @@ class MainActivity : Activity() {
 
         if (rule.matches(mockSender, mockMessage)) {
             RingtoneService.start(this)
-            setStatus("模拟短信匹配成功，正在播放")
+            if (areNotificationsAvailable()) {
+                setStatus("模拟短信匹配成功，正在播放")
+            } else {
+                setStatus("正在播放；请开启通知权限后才能在通知栏停止")
+            }
         } else {
             RingtoneService.stop(this)
             setStatus("模拟短信未匹配规则")
@@ -164,7 +207,7 @@ class MainActivity : Activity() {
 
     private fun requestNeededPermissions() {
         val permissions = mutableListOf<String>()
-        if (checkSelfPermission(Manifest.permission.RECEIVE_SMS) != PackageManager.PERMISSION_GRANTED) {
+        if (!hasSmsPermission()) {
             permissions += Manifest.permission.RECEIVE_SMS
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -174,6 +217,91 @@ class MainActivity : Activity() {
         }
         if (permissions.isNotEmpty()) {
             requestPermissions(permissions.toTypedArray(), REQUEST_PERMISSIONS)
+        }
+    }
+
+    private fun requestSmsPermissionManually() {
+        if (hasSmsPermission()) {
+            setStatus("短信权限已开启")
+            return
+        }
+        requestPermissions(arrayOf(Manifest.permission.RECEIVE_SMS), REQUEST_PERMISSIONS)
+        setStatus("请在弹窗中允许短信权限")
+    }
+
+    private fun hasSmsPermission(): Boolean {
+        return checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestNotificationPermissionManually() {
+        RingtoneService.ensurePlaybackNotificationChannel(this)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission()) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_PERMISSIONS)
+            setStatus("请在弹窗中允许通知权限")
+            return
+        }
+
+        if (areNotificationsAvailable()) {
+            setStatus("通知权限已开启")
+        } else {
+            openAppNotificationSettings()
+            setStatus("请在系统页面允许通知")
+        }
+    }
+
+    private fun hasNotificationPermission(): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun areNotificationsAvailable(): Boolean {
+        if (!hasNotificationPermission()) return false
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return true
+        val manager = getSystemService(NotificationManager::class.java)
+        if (!manager.areNotificationsEnabled()) return false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = manager.getNotificationChannel(RingtoneService.CHANNEL_ID)
+            if (channel?.importance == NotificationManager.IMPORTANCE_NONE) return false
+        }
+        return true
+    }
+
+    private fun openAppNotificationSettings() {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        }
+        try {
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(
+                    Uri.parse("package:$packageName")
+                )
+            )
+        }
+    }
+
+    private fun buildPermissionStatus(): String {
+        val smsStatus = if (hasSmsPermission()) "短信权限已开启" else "短信权限未开启"
+        val notificationStatus = if (areNotificationsAvailable()) "通知权限已开启" else "通知权限未开启"
+        return "$smsStatus，$notificationStatus"
+    }
+
+    private fun showLastSmsDiagnostic() {
+        val lastStatus = SmsDiagnostics(this).loadStatus()
+        if (lastStatus.isNotBlank()) {
+            setStatus("最近真实短信：$lastStatus")
+        }
+    }
+
+    private fun applyHideFromRecents(hide: Boolean) {
+        val activityManager = getSystemService(ActivityManager::class.java)
+        try {
+            activityManager.appTasks.forEach { task ->
+                task.setExcludeFromRecents(hide)
+            }
+        } catch (_: Exception) {
+            setStatus("最近任务显示设置未生效")
         }
     }
 

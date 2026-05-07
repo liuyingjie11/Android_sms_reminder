@@ -8,12 +8,21 @@ data class AlertRule(
     val phoneKeyword: String,
     val contentKeyword: String,
     val ringtoneUri: Uri,
-    val volume: Float
+    val volume: Float,
+    val vibrateWhenPlaying: Boolean,
+    val hideFromRecents: Boolean
 ) {
     fun matches(sender: String, message: String): Boolean {
-        val phoneMatches = phoneKeyword.isNotBlank() && sender.contains(phoneKeyword, ignoreCase = true)
-        val contentMatches = contentKeyword.isNotBlank() && message.contains(contentKeyword, ignoreCase = true)
+        val phoneMatches = splitKeywords(phoneKeyword).any { sender.contains(it, ignoreCase = true) }
+        val contentMatches = splitKeywords(contentKeyword).any { message.contains(it, ignoreCase = true) }
         return phoneMatches || contentMatches
+    }
+
+    private fun splitKeywords(rawValue: String): List<String> {
+        return rawValue
+            .split(',', '，')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
     }
 }
 
@@ -27,16 +36,27 @@ class RuleStore(context: Context) {
             phoneKeyword = prefs.getString(KEY_PHONE, "").orEmpty(),
             contentKeyword = prefs.getString(KEY_CONTENT, "").orEmpty(),
             ringtoneUri = ringtoneUri,
-            volume = prefs.getFloat(KEY_VOLUME, 0.8f).coerceIn(0f, 1f)
+            volume = prefs.getFloat(KEY_VOLUME, 0.8f).coerceIn(0f, 1f),
+            vibrateWhenPlaying = prefs.getBoolean(KEY_VIBRATE, false),
+            hideFromRecents = prefs.getBoolean(KEY_HIDE_FROM_RECENTS, false)
         )
     }
 
-    fun save(phoneKeyword: String, contentKeyword: String, ringtoneUri: Uri, volume: Float) {
+    fun save(
+        phoneKeyword: String,
+        contentKeyword: String,
+        ringtoneUri: Uri,
+        volume: Float,
+        vibrateWhenPlaying: Boolean,
+        hideFromRecents: Boolean
+    ) {
         prefs.edit()
             .putString(KEY_PHONE, phoneKeyword.trim())
             .putString(KEY_CONTENT, contentKeyword.trim())
             .putString(KEY_RINGTONE_URI, ringtoneUri.toString())
             .putFloat(KEY_VOLUME, volume.coerceIn(0f, 1f))
+            .putBoolean(KEY_VIBRATE, vibrateWhenPlaying)
+            .putBoolean(KEY_HIDE_FROM_RECENTS, hideFromRecents)
             .apply()
     }
 
@@ -45,5 +65,7 @@ class RuleStore(context: Context) {
         private const val KEY_CONTENT = "content"
         private const val KEY_RINGTONE_URI = "ringtone_uri"
         private const val KEY_VOLUME = "volume"
+        private const val KEY_VIBRATE = "vibrate"
+        private const val KEY_HIDE_FROM_RECENTS = "hide_from_recents"
     }
 }

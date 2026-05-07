@@ -12,10 +12,13 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.provider.Settings
 
 class RingtoneService : Service() {
     private var mediaPlayer: MediaPlayer? = null
+    private var vibrator: Vibrator? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
@@ -27,6 +30,7 @@ class RingtoneService : Service() {
         val rule = RuleStore(this).load()
         startForeground(NOTIFICATION_ID, buildNotification())
         startPlayback(rule.ringtoneUri, rule.volume)
+        startVibration(rule.vibrateWhenPlaying)
         return START_STICKY
     }
 
@@ -63,6 +67,7 @@ class RingtoneService : Service() {
     }
 
     private fun stopPlayback() {
+        stopVibration()
         mediaPlayer?.run {
             if (isPlaying) {
                 stop()
@@ -76,6 +81,23 @@ class RingtoneService : Service() {
             @Suppress("DEPRECATION")
             stopForeground(true)
         }
+    }
+
+    private fun startVibration(enabled: Boolean) {
+        if (!enabled) return
+        vibrator = getSystemService(Vibrator::class.java)
+        val pattern = longArrayOf(0L, 700L, 700L)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator?.vibrate(pattern, 0)
+        }
+    }
+
+    private fun stopVibration() {
+        vibrator?.cancel()
+        vibrator = null
     }
 
     private fun buildNotification(): Notification {
@@ -102,30 +124,34 @@ class RingtoneService : Service() {
 
         return builder
             .setSmallIcon(R.drawable.ic_app_icon)
+            .setTicker("短信铃声提醒")
             .setContentTitle("短信铃声提醒")
             .setContentText("已匹配短信规则，正在播放铃声")
+            .setStyle(Notification.BigTextStyle().bigText("已匹配短信规则，正在播放铃声。点击停止播放可立即关闭提醒。"))
             .setContentIntent(openIntent)
+            .setCategory(Notification.CATEGORY_ALARM)
+            .setPriority(Notification.PRIORITY_MAX)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setOngoing(true)
+            .setAutoCancel(false)
             .setOnlyAlertOnce(true)
+            .setShowWhen(true)
+            .setWhen(System.currentTimeMillis())
+            .apply {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
+                }
+            }
             .addAction(R.drawable.ic_music, "停止播放", stopIntent)
             .build()
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "短信铃声提醒",
-            NotificationManager.IMPORTANCE_HIGH
-        ).apply {
-            description = "短信匹配后播放铃声时显示"
-            setSound(null, null)
-        }
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        ensurePlaybackNotificationChannel(this)
     }
 
     companion object {
-        private const val CHANNEL_ID = "sms_ringer_playback"
+        const val CHANNEL_ID = "sms_ringer_playback"
         private const val NOTIFICATION_ID = 1001
         private const val ACTION_STOP = "com.example.smsringer.action.STOP"
 
@@ -140,6 +166,21 @@ class RingtoneService : Service() {
 
         fun stop(context: Context) {
             context.startService(Intent(context, RingtoneService::class.java).setAction(ACTION_STOP))
+        }
+
+        fun ensurePlaybackNotificationChannel(context: Context) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "短信铃声提醒",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "短信匹配后播放铃声时显示"
+                setSound(null, null)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                enableVibration(false)
+            }
+            context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
 
         private fun pendingIntentFlags(): Int {
