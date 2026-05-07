@@ -22,18 +22,22 @@ class SmsReceiver : BroadcastReceiver() {
         val body = messages.joinToString(separator = "") { it.messageBody.orEmpty() }
         val rule = RuleStore(context).load()
 
-        if (rule.matches(sender, body)) {
+        val matched = rule.matches(sender, body)
+        val detail = "号码关键词=[${rule.phoneKeyword}] 内容关键词=[${rule.contentKeyword}] 发件人=[$sender] 短信=[${body.take(30)}]"
+        Log.i(TAG, "Matching result=$matched, $detail")
+
+        if (matched) {
             try {
                 RingtoneService.start(context)
-                diagnostics.saveStatus("真实短信已匹配，已启动铃声；号码：${sender.ifBlank { "未知" }}")
-                Log.i(TAG, "SMS matched and ringtone service started. sender=$sender")
+                diagnostics.saveStatus("已匹配，已启动铃声；$detail")
+                Log.i(TAG, "SMS matched and ringtone service started")
             } catch (error: Exception) {
-                diagnostics.saveStatus("真实短信已匹配，但启动铃声失败：${error.javaClass.simpleName}")
+                diagnostics.saveStatus("已匹配，但启动铃声失败：${error.javaClass.simpleName}；$detail")
                 Log.e("SmsReceiver", "Unable to start ringtone service", error)
             }
         } else {
-            diagnostics.saveStatus("收到真实短信但未匹配；号码：${sender.ifBlank { "未知" }}；内容：${body.take(20)}")
-            Log.i(TAG, "SMS received but not matched. sender=$sender body=${body.take(40)}")
+            diagnostics.saveStatus("未匹配；$detail")
+            Log.i(TAG, "SMS received but not matched")
         }
     }
 

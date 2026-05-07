@@ -172,16 +172,18 @@ class MainActivity : Activity() {
         val mockSender = mockPhoneInput.text.toString()
         val mockMessage = mockContentInput.text.toString()
 
-        if (rule.matches(mockSender, mockMessage)) {
+        val matched = rule.matches(mockSender, mockMessage)
+        val detail = "号码关键词=[${rule.phoneKeyword}] 内容关键词=[${rule.contentKeyword}] 测试号码=[$mockSender] 测试内容=[${mockMessage.take(30)}]"
+        if (matched) {
             RingtoneService.start(this)
             if (areNotificationsAvailable()) {
-                setStatus("模拟短信匹配成功，正在播放")
+                setStatus("匹配成功，正在播放")
             } else {
                 setStatus("正在播放；请开启通知权限后才能在通知栏停止")
             }
         } else {
             RingtoneService.stop(this)
-            setStatus("模拟短信未匹配规则")
+            setStatus("未匹配；$detail")
         }
     }
 
