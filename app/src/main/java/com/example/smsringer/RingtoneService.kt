@@ -242,7 +242,7 @@ class RingtoneService : Service() {
             context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
 
-        private fun pendingIntentFlags(): Int {
+        fun pendingIntentFlags(): Int {
             return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             } else {

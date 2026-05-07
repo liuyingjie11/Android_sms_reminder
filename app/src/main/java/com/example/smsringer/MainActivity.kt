@@ -32,6 +32,7 @@ class MainActivity : Activity() {
     private lateinit var volumeValue: TextView
     private lateinit var vibrateSwitch: Switch
     private lateinit var hideFromRecentsSwitch: Switch
+    private lateinit var smsObserverSwitch: Switch
     private lateinit var ringtoneName: TextView
     private lateinit var statusText: TextView
     private var selectedRingtoneUri: Uri = Settings.System.DEFAULT_NOTIFICATION_URI
@@ -82,6 +83,17 @@ class MainActivity : Activity() {
         if (requestCode == REQUEST_PERMISSIONS) {
             setStatus(buildPermissionStatus())
         }
+        if (requestCode == REQUEST_READ_SMS) {
+            if (grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {
+                SmsObserverService.ensureObserverNotificationChannel(this)
+                SmsObserverService.start(this)
+                smsObserverSwitch.isChecked = true
+                setStatus("后台短信监听已开启")
+            } else {
+                smsObserverSwitch.isChecked = false
+                setStatus("未授予短信读取权限，无法启用后台监听")
+            }
+        }
     }
 
     private fun bindViews() {
@@ -93,6 +105,7 @@ class MainActivity : Activity() {
         volumeValue = findViewById(R.id.volumeValue)
         vibrateSwitch = findViewById(R.id.vibrateSwitch)
         hideFromRecentsSwitch = findViewById(R.id.hideFromRecentsSwitch)
+        smsObserverSwitch = findViewById(R.id.smsObserverSwitch)
         ringtoneName = findViewById(R.id.ringtoneName)
         statusText = findViewById(R.id.statusText)
 
@@ -132,6 +145,25 @@ class MainActivity : Activity() {
             applyHideFromRecents(isChecked)
             setStatus(if (isChecked) "已从最近任务中隐藏" else "已在最近任务中显示")
         }
+        smsObserverSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isLoadingRule) return@setOnCheckedChangeListener
+            if (isChecked) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                    checkSelfPermission(Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    requestPermissions(arrayOf(Manifest.permission.READ_SMS), REQUEST_READ_SMS)
+                    smsObserverSwitch.isChecked = false
+                    setStatus("需要短信读取权限才能启用后台监听")
+                    return@setOnCheckedChangeListener
+                }
+                SmsObserverService.ensureObserverNotificationChannel(this)
+                SmsObserverService.start(this)
+                setStatus("后台短信监听已开启")
+            } else {
+                SmsObserverService.stop(this)
+                setStatus("后台短信监听已关闭")
+            }
+        }
 
         findViewById<Button>(R.id.testButton).setOnClickListener {
             runMockSmsTest()
@@ -164,6 +196,7 @@ class MainActivity : Activity() {
         volumeValue.text = "${volumeSeek.progress}%"
         vibrateSwitch.isChecked = rule.vibrateWhenPlaying
         hideFromRecentsSwitch.isChecked = rule.hideFromRecents
+        smsObserverSwitch.isChecked = SmsObserverService.isRunning(this)
         isLoadingRule = false
         applyHideFromRecents(rule.hideFromRecents)
         updateRingtoneName()
@@ -333,5 +366,6 @@ class MainActivity : Activity() {
     companion object {
         private const val REQUEST_RINGTONE = 20
         private const val REQUEST_PERMISSIONS = 21
+        private const val REQUEST_READ_SMS = 22
     }
 }

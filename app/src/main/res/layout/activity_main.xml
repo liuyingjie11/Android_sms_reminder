@@ -300,6 +300,15 @@
             android:textColor="@color/ink"
             android:textSize="13sp" />
 
+        <Switch
+            android:id="@+id/smsObserverSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:layout_marginTop="4dp"
+            android:text="@string/sms_observer"
+            android:textColor="@color/ink"
+            android:textSize="13sp" />
+
         <TextView
             android:id="@+id/statusText"
             android:layout_width="match_parent"
