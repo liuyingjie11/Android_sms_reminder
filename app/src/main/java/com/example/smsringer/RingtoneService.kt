@@ -8,6 +8,8 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
@@ -15,10 +17,15 @@ import android.os.IBinder
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.Settings
+import android.util.Log
 
 class RingtoneService : Service() {
     private var mediaPlayer: MediaPlayer? = null
     private var vibrator: Vibrator? = null
+    private var audioManager: AudioManager? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
+
+    private val TAG = "RingtoneService"
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
@@ -43,8 +50,58 @@ class RingtoneService : Service() {
 
     private fun startPlayback(uri: Uri, volume: Float) {
         stopPlayback()
-        mediaPlayer = createPlayer(uri, volume) ?: createPlayer(Settings.System.DEFAULT_NOTIFICATION_URI, volume)
-        mediaPlayer?.start()
+        val player = createPlayer(uri, volume)
+        if (player != null) {
+            mediaPlayer = player
+            requestAudioFocus()
+            mediaPlayer?.start()
+            return
+        }
+        Log.w(TAG, "Primary ringtone failed, falling back to default; uri=$uri")
+        SmsDiagnostics(this).saveStatus("自定义铃声加载失败，回退到系统默认铃声")
+        val fallback = createPlayer(Settings.System.DEFAULT_NOTIFICATION_URI, volume)
+        if (fallback != null) {
+            mediaPlayer = fallback
+            requestAudioFocus()
+            mediaPlayer?.start()
+            return
+        }
+        Log.e(TAG, "Both primary and default ringtone failed to play")
+        SmsDiagnostics(this).saveStatus("铃声播放失败：自定义和系统默认铃声均无法加载")
+    }
+
+    private fun requestAudioFocus() {
+        if (audioManager == null) {
+            audioManager = getSystemService(AudioManager::class.java)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                .build()
+            audioFocusRequest?.let { audioManager?.requestAudioFocus(it) }
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager?.requestAudioFocus(
+                null,
+                AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN
+            )
+        }
+    }
+
+    private fun abandonAudioFocus() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest?.let { audioManager?.abandonAudioFocusRequest(it) }
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager?.abandonAudioFocus(null)
+        }
+        audioFocusRequest = null
     }
 
     private fun createPlayer(uri: Uri, volume: Float): MediaPlayer? {
@@ -61,13 +118,15 @@ class RingtoneService : Service() {
                 setVolume(volume, volume)
                 prepare()
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to create MediaPlayer for uri=$uri: ${e.javaClass.simpleName} - ${e.message}")
             null
         }
     }
 
     private fun stopPlayback() {
         stopVibration()
+        abandonAudioFocus()
         mediaPlayer?.run {
             if (isPlaying) {
                 stop()
