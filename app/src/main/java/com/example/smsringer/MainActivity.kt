@@ -156,9 +156,14 @@ class MainActivity : Activity() {
                     setStatus("需要短信读取权限才能启用后台监听")
                     return@setOnCheckedChangeListener
                 }
-                SmsObserverService.ensureObserverNotificationChannel(this)
-                SmsObserverService.start(this)
-                setStatus("后台短信监听已开启")
+                try {
+                    SmsObserverService.ensureObserverNotificationChannel(this)
+                    SmsObserverService.start(this)
+                    setStatus("后台短信监听已开启")
+                } catch (e: Exception) {
+                    smsObserverSwitch.isChecked = false
+                    setStatus("启动监听失败：${e.javaClass.simpleName}")
+                }
             } else {
                 SmsObserverService.stop(this)
                 setStatus("后台短信监听已关闭")

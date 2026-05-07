@@ -157,9 +157,14 @@ class SmsObserverService : Service() {
         }
 
         fun isRunning(context: Context): Boolean {
-            val manager = context.getSystemService(ActivityManager::class.java)
-            return manager.getRunningServices(Integer.MAX_VALUE)
-                .any { it.service.className == SmsObserverService::class.java.name }
+            return try {
+                val manager = context.getSystemService(ActivityManager::class.java)
+                manager.getRunningServices(Integer.MAX_VALUE)
+                    ?.any { it.service.className == SmsObserverService::class.java.name }
+                    ?: false
+            } catch (_: Exception) {
+                false
+            }
         }
 
         fun ensureObserverNotificationChannel(context: Context) {
