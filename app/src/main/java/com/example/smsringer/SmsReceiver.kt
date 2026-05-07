@@ -8,13 +8,15 @@ import android.util.Log
 
 class SmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
+        val action = intent.action
+        if (action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION &&
+            action != Telephony.Sms.Intents.SMS_DELIVER_ACTION) return
 
         val diagnostics = SmsDiagnostics(context)
         val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
         if (messages.isEmpty()) {
-            diagnostics.saveStatus("收到真实短信广播，但短信内容为空")
-            Log.i(TAG, "Received SMS broadcast with empty messages")
+            diagnostics.saveStatus("收到短信广播但内容为空；action=$action")
+            Log.i(TAG, "Received SMS broadcast with empty messages; action=$action")
             return
         }
 
@@ -23,7 +25,7 @@ class SmsReceiver : BroadcastReceiver() {
         val rule = RuleStore(context).load()
 
         val matched = rule.matches(sender, body)
-        val detail = "号码关键词=[${rule.phoneKeyword}] 内容关键词=[${rule.contentKeyword}] 发件人=[$sender] 短信=[${body.take(30)}]"
+        val detail = "action=${action?.takeLast(15)} 号码关键词=[${rule.phoneKeyword}] 内容关键词=[${rule.contentKeyword}] 发件人=[$sender] 短信=[${body.take(30)}]"
         Log.i(TAG, "Matching result=$matched, $detail")
 
         if (matched) {
