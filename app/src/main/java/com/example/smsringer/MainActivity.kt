@@ -12,6 +12,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
@@ -49,6 +51,11 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         showLastSmsDiagnostic()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        saveRule(showToast = false)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -90,6 +97,18 @@ class MainActivity : Activity() {
         statusText = findViewById(R.id.statusText)
 
         mockContentInput.imeOptions = EditorInfo.IME_ACTION_DONE
+
+        val autoSaveWatcher = object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                if (isLoadingRule) return
+                saveRule(showToast = false)
+            }
+        }
+        phoneInput.addTextChangedListener(autoSaveWatcher)
+        contentInput.addTextChangedListener(autoSaveWatcher)
+
         volumeSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 volumeValue.text = "$progress%"
