@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">短信铃声提醒</string>
+    <string name="phone_label">手机号</string>
+    <string name="sms_label">短信内容</string>
+    <string name="mock_phone_label">模拟号码</string>
+    <string name="mock_sms_label">模拟内容</string>
+    <string name="test">模拟测试</string>
+    <string name="save">保存</string>
+    <string name="choose_ringtone">选择铃声</string>
+    <string name="stop_playback">停止播放</string>
+    <string name="volume">音量</string>
+</resources>

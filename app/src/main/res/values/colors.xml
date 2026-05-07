@@ -1,0 +1,11 @@
+<resources>
+    <color name="page_background">#F6F6F6</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="primary_blue">#2388FF</color>
+    <color name="primary_blue_dark">#0D6FDD</color>
+    <color name="ink">#242424</color>
+    <color name="muted">#666666</color>
+    <color name="danger_red">#E91D2D</color>
+    <color name="button_dark">#151515</color>
+    <color name="border">#D9DDE5</color>
+</resources>
