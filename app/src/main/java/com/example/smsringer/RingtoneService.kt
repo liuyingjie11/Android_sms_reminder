@@ -88,7 +88,7 @@ class RingtoneService : Service() {
             @Suppress("DEPRECATION")
             audioManager?.requestAudioFocus(
                 null,
-                AudioManager.STREAM_MUSIC,
+                AudioManager.STREAM_ALARM,
                 AudioManager.AUDIOFOCUS_GAIN
             )
         }
