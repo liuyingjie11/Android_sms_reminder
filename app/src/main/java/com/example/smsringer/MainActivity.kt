@@ -86,11 +86,17 @@ class MainActivity : Activity() {
         if (requestCode == REQUEST_READ_SMS) {
             if (grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {
                 SmsObserverService.ensureObserverNotificationChannel(this)
+                saveRule(showToast = false, smsObserverEnabledOverride = true)
                 SmsObserverService.start(this)
+                isLoadingRule = true
                 smsObserverSwitch.isChecked = true
+                isLoadingRule = false
                 setStatus("后台短信监听已开启")
             } else {
+                saveRule(showToast = false, smsObserverEnabledOverride = false)
+                isLoadingRule = true
                 smsObserverSwitch.isChecked = false
+                isLoadingRule = false
                 setStatus("未授予短信读取权限，无法启用后台监听")
             }
         }
@@ -149,22 +155,24 @@ class MainActivity : Activity() {
             if (isLoadingRule) return@setOnCheckedChangeListener
             if (isChecked) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-                    checkSelfPermission(Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED
+                    !hasReadSmsPermission()
                 ) {
                     requestPermissions(arrayOf(Manifest.permission.READ_SMS), REQUEST_READ_SMS)
-                    smsObserverSwitch.isChecked = false
                     setStatus("需要短信读取权限才能启用后台监听")
                     return@setOnCheckedChangeListener
                 }
                 try {
                     SmsObserverService.ensureObserverNotificationChannel(this)
+                    saveRule(showToast = false, smsObserverEnabledOverride = true)
                     SmsObserverService.start(this)
                     setStatus("后台短信监听已开启")
                 } catch (e: Exception) {
+                    saveRule(showToast = false, smsObserverEnabledOverride = false)
                     smsObserverSwitch.isChecked = false
                     setStatus("启动监听失败：${e.javaClass.simpleName}")
                 }
             } else {
+                saveRule(showToast = false, smsObserverEnabledOverride = false)
                 SmsObserverService.stop(this)
                 setStatus("后台短信监听已关闭")
             }
@@ -181,7 +189,9 @@ class MainActivity : Activity() {
         }
         findViewById<Button>(R.id.stopButton).setOnClickListener {
             RingtoneService.stop(this)
-            SmsObserverService.stopPlayback(this)
+            if (SmsObserverService.isRunning(this)) {
+                SmsObserverService.stopPlayback(this)
+            }
             setStatus("已停止播放")
         }
         findViewById<Button>(R.id.permissionButton).setOnClickListener {
@@ -202,21 +212,23 @@ class MainActivity : Activity() {
         volumeValue.text = "${volumeSeek.progress}%"
         vibrateSwitch.isChecked = rule.vibrateWhenPlaying
         hideFromRecentsSwitch.isChecked = rule.hideFromRecents
-        smsObserverSwitch.isChecked = SmsObserverService.isRunning(this)
+        smsObserverSwitch.isChecked = rule.smsObserverEnabled
         isLoadingRule = false
+        ensureSmsObserverState(rule.smsObserverEnabled)
         applyHideFromRecents(rule.hideFromRecents)
         updateRingtoneName()
         setStatus("填写号码或短信内容关键词后保存")
     }
 
-    private fun saveRule(showToast: Boolean) {
+    private fun saveRule(showToast: Boolean, smsObserverEnabledOverride: Boolean? = null) {
         store.save(
             phoneKeyword = phoneInput.text.toString(),
             contentKeyword = contentInput.text.toString(),
             ringtoneUri = selectedRingtoneUri,
             volume = volumeSeek.progress / 100f,
             vibrateWhenPlaying = vibrateSwitch.isChecked,
-            hideFromRecents = hideFromRecentsSwitch.isChecked
+            hideFromRecents = hideFromRecentsSwitch.isChecked,
+            smsObserverEnabled = smsObserverEnabledOverride ?: smsObserverSwitch.isChecked
         )
         if (showToast) {
             Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show()
@@ -293,6 +305,11 @@ class MainActivity : Activity() {
         return checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
     }
 
+    private fun hasReadSmsPermission(): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
+            checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
+    }
+
     private fun requestNotificationPermissionManually() {
         RingtoneService.ensurePlaybackNotificationChannel(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission()) {
@@ -351,6 +368,18 @@ class MainActivity : Activity() {
         val lastStatus = SmsDiagnostics(this).loadStatus()
         if (lastStatus.isNotBlank()) {
             setStatus("最近真实短信：$lastStatus")
+        }
+    }
+
+    private fun ensureSmsObserverState(enabled: Boolean) {
+        if (!enabled) return
+        if (!hasReadSmsPermission()) {
+            SmsDiagnostics(this).saveStatus("后台监听未启动：缺少短信读取权限")
+            return
+        }
+        if (!SmsObserverService.isRunning(this)) {
+            SmsObserverService.ensureObserverNotificationChannel(this)
+            SmsObserverService.start(this)
         }
     }
 

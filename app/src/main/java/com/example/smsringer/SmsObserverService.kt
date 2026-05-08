@@ -44,8 +44,7 @@ class SmsObserverService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
-                stopPlayback()
-                stopSelf()
+                shutdownService()
                 return START_NOT_STICKY
             }
             ACTION_STOP_PLAYBACK -> {
@@ -59,8 +58,9 @@ class SmsObserverService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        stopPlayback()
+        stopPlayback(updateNotification = false)
         unregisterObserver()
+        removeForegroundNotification()
         Log.i(TAG, "SmsObserverService destroyed")
         super.onDestroy()
     }
@@ -121,7 +121,7 @@ class SmsObserverService : Service() {
     }
 
     private fun startPlayback(uri: Uri, volume: Float, vibrateEnabled: Boolean) {
-        stopPlayback()
+        stopPlayback(updateNotification = false)
         isPlaying = true
 
         val player = createPlayer(uri, volume)
@@ -212,7 +212,7 @@ class SmsObserverService : Service() {
         }
     }
 
-    private fun stopPlayback() {
+    private fun stopPlayback(updateNotification: Boolean = true) {
         stopVibration()
         abandonAudioFocus()
         mediaPlayer?.run {
@@ -221,7 +221,16 @@ class SmsObserverService : Service() {
         }
         mediaPlayer = null
         isPlaying = false
-        updatePlaybackNotification()
+        if (updateNotification) {
+            updatePlaybackNotification()
+        }
+    }
+
+    private fun shutdownService() {
+        stopPlayback(updateNotification = false)
+        unregisterObserver()
+        removeForegroundNotification()
+        stopSelf()
     }
 
     private fun stopVibration() {
@@ -232,6 +241,16 @@ class SmsObserverService : Service() {
     private fun updatePlaybackNotification() {
         val nm = getSystemService(NotificationManager::class.java)
         nm.notify(OBSERVER_NOTIFICATION_ID, buildNotification())
+    }
+
+    private fun removeForegroundNotification() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+        getSystemService(NotificationManager::class.java).cancel(OBSERVER_NOTIFICATION_ID)
     }
 
     private fun buildNotification(): Notification {
@@ -306,15 +325,21 @@ class SmsObserverService : Service() {
         }
 
         fun stop(context: Context) {
-            context.startService(
-                Intent(context, SmsObserverService::class.java).setAction(ACTION_STOP)
-            )
+            if (isRunning(context)) {
+                context.startService(
+                    Intent(context, SmsObserverService::class.java).setAction(ACTION_STOP)
+                )
+            } else {
+                clearObserverNotification(context)
+            }
         }
 
         fun stopPlayback(context: Context) {
-            context.startService(
-                Intent(context, SmsObserverService::class.java).setAction(ACTION_STOP_PLAYBACK)
-            )
+            if (isRunning(context)) {
+                context.startService(
+                    Intent(context, SmsObserverService::class.java).setAction(ACTION_STOP_PLAYBACK)
+                )
+            }
         }
 
         fun isRunning(context: Context): Boolean {
@@ -341,6 +366,11 @@ class SmsObserverService : Service() {
             }
             context.getSystemService(NotificationManager::class.java)
                 .createNotificationChannel(channel)
+        }
+
+        fun clearObserverNotification(context: Context) {
+            context.getSystemService(NotificationManager::class.java)
+                .cancel(OBSERVER_NOTIFICATION_ID)
         }
     }
 }

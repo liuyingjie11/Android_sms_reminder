@@ -10,7 +10,8 @@ data class AlertRule(
     val ringtoneUri: Uri,
     val volume: Float,
     val vibrateWhenPlaying: Boolean,
-    val hideFromRecents: Boolean
+    val hideFromRecents: Boolean,
+    val smsObserverEnabled: Boolean
 ) {
     fun matches(sender: String, message: String): Boolean {
         val phoneMatches = splitKeywords(phoneKeyword).any { sender.contains(it, ignoreCase = true) }
@@ -38,7 +39,8 @@ class RuleStore(context: Context) {
             ringtoneUri = ringtoneUri,
             volume = prefs.getFloat(KEY_VOLUME, 0.8f).coerceIn(0f, 1f),
             vibrateWhenPlaying = prefs.getBoolean(KEY_VIBRATE, false),
-            hideFromRecents = prefs.getBoolean(KEY_HIDE_FROM_RECENTS, false)
+            hideFromRecents = prefs.getBoolean(KEY_HIDE_FROM_RECENTS, false),
+            smsObserverEnabled = prefs.getBoolean(KEY_SMS_OBSERVER_ENABLED, false)
         )
     }
 
@@ -48,7 +50,8 @@ class RuleStore(context: Context) {
         ringtoneUri: Uri,
         volume: Float,
         vibrateWhenPlaying: Boolean,
-        hideFromRecents: Boolean
+        hideFromRecents: Boolean,
+        smsObserverEnabled: Boolean
     ) {
         prefs.edit()
             .putString(KEY_PHONE, phoneKeyword.trim())
@@ -57,6 +60,7 @@ class RuleStore(context: Context) {
             .putFloat(KEY_VOLUME, volume.coerceIn(0f, 1f))
             .putBoolean(KEY_VIBRATE, vibrateWhenPlaying)
             .putBoolean(KEY_HIDE_FROM_RECENTS, hideFromRecents)
+            .putBoolean(KEY_SMS_OBSERVER_ENABLED, smsObserverEnabled)
             .apply()
     }
 
@@ -67,5 +71,6 @@ class RuleStore(context: Context) {
         private const val KEY_VOLUME = "volume"
         private const val KEY_VIBRATE = "vibrate"
         private const val KEY_HIDE_FROM_RECENTS = "hide_from_recents"
+        private const val KEY_SMS_OBSERVER_ENABLED = "sms_observer_enabled"
     }
 }

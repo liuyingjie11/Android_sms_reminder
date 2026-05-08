@@ -1,11 +1,16 @@
 <resources>
     <color name="page_background">#F6F6F6</color>
+    <color name="page_background_top">#F2F7FF</color>
     <color name="surface">#FFFFFF</color>
+    <color name="surface_soft">#F8FAFD</color>
     <color name="primary_blue">#2388FF</color>
     <color name="primary_blue_dark">#0D6FDD</color>
+    <color name="primary_blue_soft">#EAF3FF</color>
     <color name="ink">#242424</color>
     <color name="muted">#666666</color>
+    <color name="muted_light">#8A94A6</color>
     <color name="danger_red">#E91D2D</color>
     <color name="button_dark">#151515</color>
     <color name="border">#D9DDE5</color>
+    <color name="border_soft">#E9EDF4</color>
 </resources>

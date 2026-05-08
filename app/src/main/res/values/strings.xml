@@ -2,6 +2,10 @@
     <string name="app_name">短信铃声提醒</string>
     <string name="phone_label">匹配手机号</string>
     <string name="sms_label">匹配短信内容</string>
+    <string name="section_match_rule">匹配规则</string>
+    <string name="section_mock_test">模拟短信</string>
+    <string name="section_alert_settings">提醒设置</string>
+    <string name="section_system_settings">系统设置</string>
     <string name="mock_phone_label">模拟号码</string>
     <string name="mock_sms_label">模拟内容</string>
     <string name="test">模拟测试</string>
