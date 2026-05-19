@@ -3,6 +3,7 @@ package com.example.smsringer
 import android.Manifest
 import android.app.Activity
 import android.app.ActivityManager
+import android.app.AlertDialog
 import android.app.NotificationManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -114,6 +115,9 @@ class MainActivity : Activity() {
         smsObserverSwitch = findViewById(R.id.smsObserverSwitch)
         ringtoneName = findViewById(R.id.ringtoneName)
         statusText = findViewById(R.id.statusText)
+        statusText.setOnClickListener {
+            showRecentLogsDialog()
+        }
 
         mockContentInput.imeOptions = EditorInfo.IME_ACTION_DONE
 
@@ -367,8 +371,23 @@ class MainActivity : Activity() {
     private fun showLastSmsDiagnostic() {
         val lastStatus = SmsDiagnostics(this).loadStatus()
         if (lastStatus.isNotBlank()) {
-            setStatus("最近真实短信：$lastStatus")
+            setStatus("最近真实短信：$lastStatus", recordLog = false)
         }
+    }
+
+    private fun showRecentLogsDialog() {
+        val recentLogs = SmsDiagnostics(this).loadRecentStatuses()
+        val message = if (recentLogs.isEmpty()) {
+            "暂无日志"
+        } else {
+            recentLogs.joinToString(separator = "\n\n")
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("最近10条日志")
+            .setMessage(message)
+            .setPositiveButton("知道了", null)
+            .show()
     }
 
     private fun ensureSmsObserverState(enabled: Boolean) {
@@ -394,8 +413,11 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun setStatus(message: String) {
+    private fun setStatus(message: String, recordLog: Boolean = true) {
         statusText.text = message
+        if (recordLog) {
+            SmsDiagnostics(this).saveStatus(message)
+        }
     }
 
     companion object {
